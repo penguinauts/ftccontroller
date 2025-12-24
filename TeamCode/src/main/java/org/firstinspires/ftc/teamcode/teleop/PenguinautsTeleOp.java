@@ -15,9 +15,6 @@ import org.firstinspires.ftc.teamcode.helpers.Robot;
 @TeleOp(name="PenguinautsTeleOp", group="Penguinauts")
 public class PenguinautsTeleOp extends LinearOpMode {
 
-    //Sample Comment GitHub written by Esha Vellanki
-    //Hi guys! Bharat uncle told me to write a comment on this code - Swara Tamirisa
-
     // ----------------------------------------------------
     // SHOOTER VELOCITIES
     // ----------------------------------------------------
