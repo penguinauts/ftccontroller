@@ -24,9 +24,9 @@ public class Auto_Blue_6Ball extends LinearOpMode {
     // -----------------------------
     // DISTANCES (DASHBOARD TUNABLE)
     // -----------------------------
-    public static double BACK_UP_FROM_START_INCHES    = 46.0;
+    public static double BACK_UP_FROM_START_INCHES    = 44.5;
     public static double FORWARD_AFTER_TURN_INCHES    = 9;
-    public static double SLOW_FORWARD_INTAKE_INCHES   = 24.0;
+    public static double SLOW_FORWARD_INTAKE_INCHES   = 25.5;
     public static double BACK_TO_RAMP_INCHES          = 33.0;
     public static double FINAL_FORWARD_TO_RAMP_INCHES = 42.0;
 
@@ -70,20 +70,20 @@ public class Auto_Blue_6Ball extends LinearOpMode {
         if (!opModeIsActive()) return;
 
 
-        // ============================================================
-        // STEP 1 — SPIN SHOOTER FOR PRELOADS
-        // ============================================================
+//         ============================================================
+//         STEP 1 — SPIN SHOOTER FOR PRELOADS
+//         ============================================================
         Robot.shooter.setVelocity(SHOOTER_FIRE_VELOCITY);
         Robot.safeWait(750);
-
-        // ============================================================
-        // STEP 2 — SHOOT FIRST 3 BALLS
-        // ============================================================
+//
+//        // ============================================================
+//        // STEP 2 — SHOOT FIRST 3 BALLS
+//        // ============================================================
         Robot.ThreeBallShootingProcess();
-
-        // ============================================================
-        // STEP 3 — DRIVE TO FIELD BALLS
-        // ============================================================
+//
+//         ============================================================
+//         STEP 3 — DRIVE TO FIELD BALLS
+//         ============================================================
         Robot.driveStraightInches(this, -BACK_UP_FROM_START_INCHES, 1.0);
         Robot.safeWait(200);
 
@@ -155,6 +155,8 @@ public class Auto_Blue_6Ball extends LinearOpMode {
 //        // TELEMETRY
 //        // ----------------------------------------------------
 //        telemetry.addData("ShooterVelocity", Robot.shooter.getVelocity());
+//        telemetry.addData("RightWheelVelocity", Robot.rightWheel.getVelocity());
+//        telemetry.addData("LeftWheelVelocity", Robot.leftWheel.getVelocity());
 //        telemetry.addData("IntakePower", Robot.intakeMotor.getPower());
 //        telemetry.addData("ShooterCurrent(mA)", Robot.shooter.getCurrent(CurrentUnit.MILLIAMPS));
 //        telemetry.update();

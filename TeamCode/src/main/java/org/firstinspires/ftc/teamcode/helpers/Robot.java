@@ -147,46 +147,65 @@ public class Robot {
         rightWheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
     }
 
+    /**
+     * Calculates the target velocity at a given position using a motion profile.
+     * Supports both trapezoidal (full speed reached) and triangular (peak speed limited) profiles.
+     *
+     * @param targetTicks Total distance to travel (in ticks)
+     * @param currentTicks Current position (in ticks)
+     * @return Target velocity at current position (in ticks/sec)
+     */
     public static double getProfiledVelocity(double targetTicks, double currentTicks) {
+        // Input validation
+        if (targetTicks == 0) return 0;
 
+        // Work with absolute values for simplicity
         double x = Math.abs(currentTicks);
         double total = Math.abs(targetTicks);
 
-        // Distance required to accelerate to max velocity
+        // Clamp current position to valid range
+        if (x > total) {
+            x = total;
+        }
+
+        // Distance required to accelerate/decelerate to/from max velocity
         double accelDist = (MAX_VEL * MAX_VEL) / (2.0 * MAX_ACCEL);
         double decelDist = (MAX_VEL * MAX_VEL) / (2.0 * MAX_DECEL);
 
         double vel;
 
-        // If robot cannot reach full speed → triangular profile
+        // Check if robot can reach full speed
         if (accelDist + decelDist > total) {
-//        if (2 * accelDist > total) {
-            if (x < accelDist) {
-//            if (x < total / 2.0) {
+            // TRIANGULAR PROFILE: Cannot reach MAX_VEL
+            // Calculate peak velocity and transition point
+            double peakVel = Math.sqrt(2.0 * MAX_ACCEL * MAX_DECEL * total / (MAX_ACCEL + MAX_DECEL));
+            double transitionPoint = (peakVel * peakVel) / (2.0 * MAX_ACCEL);
+
+            if (x < transitionPoint) {
+                // Acceleration phase
                 vel = Math.sqrt(2.0 * MAX_ACCEL * x);
             } else {
+                // Deceleration phase
                 double remain = total - x;
                 vel = Math.sqrt(2.0 * MAX_DECEL * remain);
-//                vel = Math.sqrt(2.0 * MAX_ACCEL * remain);
             }
-        }
-        else {
-            // Trapezoidal profile
+        } else {
+            // TRAPEZOIDAL PROFILE: Can reach MAX_VEL
             if (x < accelDist) {
+                // Acceleration phase
                 vel = Math.sqrt(2.0 * MAX_ACCEL * x);
-            }
-            else if (x > (total - decelDist)) {
-//            else if (x > (total - accelDist)) {
+            } else if (x > (total - decelDist)) {
+                // Deceleration phase
                 double remain = total - x;
                 vel = Math.sqrt(2.0 * MAX_DECEL * remain);
-//                vel = Math.sqrt(2.0 * MAX_ACCEL * remain);
-            }
-            else {
+            } else {
+                // Constant velocity phase
                 vel = MAX_VEL;
             }
         }
 
-        return vel;
+        // Safety clamp to ensure velocity is within bounds
+        return Math.min(vel, MAX_VEL);
     }
 
     // -------------------------------------------------------------------
@@ -210,9 +229,23 @@ public class Robot {
     // -------------------------------------------------------------------
     // ENCODER STRAIGHT DRIVE (NO IMU)
     // -------------------------------------------------------------------
+    // Drift correction constant (tune if robot veers left or right)
+    public static double DRIFT_CORRECTION_KP = 0.05;
+
+    /**
+     * Drives straight for a specified distance using motion profiling and drift correction.
+     *
+     * @param opMode The active OpMode (for checking if still active)
+     * @param inches Distance to travel in inches (positive = forward, negative = backward)
+     * @param maxPower Maximum power multiplier (0.0 to 1.0) to scale the motion profile
+     */
     public static void driveStraightInches(LinearOpMode opMode,
                                            double inches,
                                            double maxPower) {
+        // Input validation
+        if (inches == 0) return;
+        if (maxPower <= 0) maxPower = 0.1;
+        if (maxPower > 1.0) maxPower = 1.0;
 
         recomputeConstants();
 
@@ -226,27 +259,53 @@ public class Robot {
         leftWheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         rightWheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
-        while (opMode.opModeIsActive()) {
+        // Timeout protection (calculate based on distance and max velocity)
+        double estimatedTime = (Math.abs(targetTicks) / MAX_VEL) * 1.5 + 2.0; // 50% margin + 2sec
+        ElapsedTime timeout = new ElapsedTime();
 
+        while (opMode.opModeIsActive()) {
+            // Check timeout
+            if (timeout.seconds() > estimatedTime) {
+                opMode.telemetry.addData("Warning", "Drive timeout exceeded");
+                opMode.telemetry.update();
+                break;
+            }
+
+            // Get individual wheel positions
             int posL = Math.abs(leftWheel.getCurrentPosition());
             int posR = Math.abs(rightWheel.getCurrentPosition());
-            int avg = (posL + posR) / 2;
+            double avgPos = (posL + posR) / 2.0; // Use double for precision
 
             // Stop when reached target distance
-            if (avg >= Math.abs(targetTicks)) break;
+            if (avgPos >= Math.abs(targetTicks)) break;
 
-            // Desired velocity at this point in the motion profile
-            double targetVel = getProfiledVelocity(targetTicks, avg);
+            // Get desired velocity from motion profile (both params as absolute values)
+            double targetVel = getProfiledVelocity(Math.abs(targetTicks), avgPos);
 
-            // Scale targetVel by maxPower but ensure MIN_POWER is enforced
-            double scaledPower = Math.max(MIN_POWER, maxPower * (targetVel / MAX_VEL));
+            // Scale the velocity directly by maxPower
+            double scaledVel = targetVel * maxPower;
 
-            // Convert scaled power back into a velocity command
-            double scaledVel = MAX_VEL * scaledPower;
+            // Apply MIN_POWER only when not decelerating near the end
+            // (during deceleration, we want to allow lower speeds for smooth stopping)
+            double remainingDist = Math.abs(targetTicks) - avgPos;
+            double decelThreshold = (MIN_POWER * MIN_POWER * MAX_VEL * MAX_VEL) / (2.0 * MAX_DECEL);
 
-            // Apply direction (forward or backward)
-            leftWheel.setVelocity(direction * scaledVel);
-            rightWheel.setVelocity(direction * scaledVel);
+            if (remainingDist > decelThreshold) {
+                // Not in final deceleration zone - enforce minimum power
+                double minVel = MIN_POWER * MAX_VEL;
+                scaledVel = Math.max(scaledVel, minVel);
+            }
+
+            // Drift correction: compute error between left and right wheels
+            int positionError = posL - posR;
+            double correction = DRIFT_CORRECTION_KP * positionError;
+
+            // Apply direction and drift correction
+            double leftVel = direction * (scaledVel - correction);
+            double rightVel = direction * (scaledVel + correction);
+
+            leftWheel.setVelocity(leftVel);
+            rightWheel.setVelocity(rightVel);
 
             opMode.idle();
         }
@@ -272,9 +331,21 @@ public class Robot {
     // -------------------------------------------------------------------
     // SLOW DRIVE
     // -------------------------------------------------------------------
+    /**
+     * Drives straight slowly for precise positioning using motion profiling and drift correction.
+     * Uses reduced MIN_POWER threshold for finer control at low speeds.
+     *
+     * @param opMode The active OpMode (for checking if still active)
+     * @param inches Distance to travel in inches (positive = forward, negative = backward)
+     * @param maxPower Maximum power multiplier (0.0 to 1.0) - typically lower than regular drive
+     */
     public static void driveStraightSlowInches(LinearOpMode opMode,
                                                double inches,
                                                double maxPower) {
+        // Input validation
+        if (inches == 0) return;
+        if (maxPower <= 0) maxPower = 0.1;
+        if (maxPower > 1.0) maxPower = 1.0;
 
         recomputeConstants();
 
@@ -287,27 +358,52 @@ public class Robot {
         leftWheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         rightWheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
-        while (opMode.opModeIsActive()) {
+        // Timeout protection (slower movement needs more time)
+        double estimatedTime = (Math.abs(targetTicks) / (MAX_VEL * maxPower)) * 2.0 + 3.0;
+        ElapsedTime timeout = new ElapsedTime();
 
+        while (opMode.opModeIsActive()) {
+            // Check timeout
+            if (timeout.seconds() > estimatedTime) {
+                opMode.telemetry.addData("Warning", "Slow drive timeout exceeded");
+                opMode.telemetry.update();
+                break;
+            }
+
+            // Get individual wheel positions
             int posL = Math.abs(leftWheel.getCurrentPosition());
             int posR = Math.abs(rightWheel.getCurrentPosition());
-            int avg = (posL + posR) / 2;
+            double avgPos = (posL + posR) / 2.0; // Use double for precision
 
-            if (avg >= Math.abs(targetTicks)) break;
+            if (avgPos >= Math.abs(targetTicks)) break;
 
-            // base profiled velocity
-            double targetVel = getProfiledVelocity(targetTicks, avg);
+            // Get desired velocity from motion profile (both params as absolute values)
+            double targetVel = getProfiledVelocity(Math.abs(targetTicks), avgPos);
 
-            // slow mode: clamp velocity down with maxPower
-            double scaledPower = maxPower * (targetVel / MAX_VEL);
+            // Scale the velocity directly by maxPower for slow mode
+            double scaledVel = targetVel * maxPower;
 
-            // ensure slow drive still breaks friction
-            scaledPower = Math.max(scaledPower, MIN_POWER * 0.8);
+            // Slow drive uses reduced MIN_POWER (80%) to allow finer control
+            // Apply MIN_POWER only when not decelerating near the end
+            double remainingDist = Math.abs(targetTicks) - avgPos;
+            double decelThreshold = (MIN_POWER * 0.8 * MIN_POWER * 0.8 * MAX_VEL * MAX_VEL) / (2.0 * MAX_DECEL);
 
-            double scaledVel = MAX_VEL * scaledPower;
+            if (remainingDist > decelThreshold) {
+                // Not in final deceleration zone - enforce reduced minimum power
+                double minVel = MIN_POWER * 0.8 * MAX_VEL;
+                scaledVel = Math.max(scaledVel, minVel);
+            }
 
-            leftWheel.setVelocity(direction * scaledVel);
-            rightWheel.setVelocity(direction * scaledVel);
+            // Drift correction: compute error between left and right wheels
+            int positionError = posL - posR;
+            double correction = DRIFT_CORRECTION_KP * positionError;
+
+            // Apply direction and drift correction
+            double leftVel = direction * (scaledVel - correction);
+            double rightVel = direction * (scaledVel + correction);
+
+            leftWheel.setVelocity(leftVel);
+            rightWheel.setVelocity(rightVel);
 
             opMode.idle();
         }
@@ -429,9 +525,9 @@ public class Robot {
     }
 
     public static void TestShoot1() {
-
-        TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
-        safeWait(400);
+//
+//        TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
+//        safeWait(400);
 
         intakeMotor.setPower(-1);
         leftGatekeeperServo.setPower(1);
@@ -443,6 +539,12 @@ public class Robot {
         rightGatekeeperServo.setPower(0);
         safeWait(300);
 
+        OpenAndCloseTheTrapServo();
+        TurnOnOutakeForXMilliSecondsAndTurnOff(50);
+        TurnOnIntakeForXMilliSecondsAndTurnOff(300);
+        safeWait(200);
+        TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
+        safeWait(300);
         OpenAndCloseTheTrapServo();
         TurnOnOutakeForXMilliSecondsAndTurnOff(50);
         TurnOnIntakeForXMilliSecondsAndTurnOff(300);
