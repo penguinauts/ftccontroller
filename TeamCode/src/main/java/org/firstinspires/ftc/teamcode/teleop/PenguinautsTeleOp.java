@@ -48,7 +48,7 @@ public class PenguinautsTeleOp extends LinearOpMode {
 
     public static double GATEKEEPER_NEG = -1;
     public static double GATEKEEPER_POS = -1;
-
+//Aarnish
 
     boolean rightBumperPressed = false;
     boolean leftBumperPressed  = false;
