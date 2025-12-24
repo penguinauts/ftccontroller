@@ -18,7 +18,7 @@ public class PenguinautsTeleOp extends LinearOpMode {
     // ----------------------------------------------------
     // SHOOTER VELOCITIES
     // ----------------------------------------------------
-    public static double SHOOTER_SPEED_FORWARD = 1200;
+    public static double SHOOTER_SPEED_FORWARD = 1100;
     public static double SHOOTER_SPEED_REVERSE = -200;
 
     // ----------------------------------------------------
