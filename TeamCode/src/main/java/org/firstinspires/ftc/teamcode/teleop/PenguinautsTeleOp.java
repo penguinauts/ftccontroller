@@ -1,4 +1,3 @@
-//GreenGuacamoleOhioAuraFarmerRishi
 package org.firstinspires.ftc.teamcode.teleop;
 
 import com.acmerobotics.dashboard.FtcDashboard;
@@ -15,6 +14,9 @@ import org.firstinspires.ftc.teamcode.helpers.Robot;
 @Config
 @TeleOp(name="PenguinautsTeleOp", group="Penguinauts")
 public class PenguinautsTeleOp extends LinearOpMode {
+
+    //Sample Comment GitHub written by Esha Vellanki
+    //Hi guys! Bharat uncle told me to write a comment on this code - Swara Tamirisa
 
     // ----------------------------------------------------
     // SHOOTER VELOCITIES
