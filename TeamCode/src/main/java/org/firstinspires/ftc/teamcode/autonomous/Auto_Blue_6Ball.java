@@ -18,22 +18,22 @@ public class Auto_Blue_6Ball extends LinearOpMode {
     // -----------------------------
     // SHOOTER TUNING
     // -----------------------------
-    public static double SHOOTER_FIRE_VELOCITY  = 1050;
+    public static double SHOOTER_FIRE_VELOCITY  = 1005;
     public static double SHOOTER_INTAKE_VELOCITY = -200;
 
     // -----------------------------
     // DISTANCES (DASHBOARD TUNABLE)
     // -----------------------------
-    public static double BACK_UP_FROM_START_INCHES    = 44.5;
+    public static double BACK_UP_FROM_START_INCHES    = 41.0;
     public static double FORWARD_AFTER_TURN_INCHES    = 9;
-    public static double SLOW_FORWARD_INTAKE_INCHES   = 25.5;
-    public static double BACK_TO_RAMP_INCHES          = 33.0;
-    public static double FINAL_FORWARD_TO_RAMP_INCHES = 42.0;
+    public static double SLOW_FORWARD_INTAKE_INCHES   = 18.0;
+    public static double BACK_TO_RAMP_INCHES          = 30.0;
+    public static double FINAL_FORWARD_TO_RAMP_INCHES = 43.0;
 
     // -----------------------------
     // TURN ANGLES (TUNABLE)
     // -----------------------------
-    public static double TURN_TO_INTAKE = -44.5;
+    public static double TURN_TO_INTAKE = -43.5;
     public static double TURN_TO_SHOOT = 48.0;
     //public static double TURN_3_DEGREES = 0.0;
 
@@ -50,8 +50,8 @@ public class Auto_Blue_6Ball extends LinearOpMode {
     //public static double DRIVE_POWER_TURN_2 = 0.6;
     //public static double DRIVE_POWER_TURN_3 = 0.5;
     public static double FINAL_EXIT_1 = -5.0;
-    public static double FINAL_EXIT_2 = -20.0;
-    public static double FINAL_TURN = 60.0;
+    public static double FINAL_EXIT_2 = -15.0;
+    public static double FINAL_TURN = 45.0;
     public static double GATEKEEPER_POWER = -1;
 
 

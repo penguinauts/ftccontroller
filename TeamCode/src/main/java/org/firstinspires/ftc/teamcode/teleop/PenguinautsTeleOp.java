@@ -29,6 +29,13 @@ public class PenguinautsTeleOp extends LinearOpMode {
     public static double DPAD_RIGHT = 1000;
     public static double DPAD_LEFT = 1275;
 
+    // ----------------------------------------------------
+    // SHOOTER CONSISTENCY FEATURES
+    // ----------------------------------------------------
+    public static boolean ENABLE_VELOCITY_GATING = true;     // Prevent shooting if velocity too low
+    public static boolean ENABLE_AUTO_RECOVERY = true;       // Auto-wait for recovery between shots
+    public static int MIN_SHOT_INTERVAL_MS = 350;            // Minimum time between shots
+    
     // DPAD edge detection
     boolean lastDpadUp = false;
     boolean lastDpadDown = false;
@@ -38,6 +45,11 @@ public class PenguinautsTeleOp extends LinearOpMode {
     // Shooter override state
     boolean shooterManualOverride = false;
     double shooterTargetVelocity = SHOOTER_SPEED_FORWARD;
+    
+    // Shooter readiness tracking
+    private final ElapsedTime lastShotTimer = new ElapsedTime();
+    private boolean shooterReady = false;
+    private boolean lastShotWasReady = true;
 
     // ----------------------------------------------------
     // GATEKEEPER / TRAP TIMING
@@ -77,19 +89,43 @@ public class PenguinautsTeleOp extends LinearOpMode {
 
         // Shooter starts warmed up
         shooterTargetVelocity = SHOOTER_SPEED_FORWARD;
+        Robot.shooter.setVelocity(shooterTargetVelocity);
+        lastShotTimer.reset();
 
         while (opModeIsActive()) {
 
             // ----------------------------------------------------
-            // RIGHT BUMPER RELEASE = Gatekeeper pulse
+            // CHECK SHOOTER VELOCITY STATUS
+            // ----------------------------------------------------
+            double currentVelocity = Robot.shooter.getVelocity();
+            double velocityError = Math.abs(shooterTargetVelocity - currentVelocity);
+            
+            // Determine if shooter is ready to fire
+            if (shooterTargetVelocity > 0) {  // Forward shooting mode
+                shooterReady = velocityError <= Robot.SHOOTER_VELOCITY_TOLERANCE &&
+                               lastShotTimer.milliseconds() >= MIN_SHOT_INTERVAL_MS;
+            } else {  // Reverse mode (intaking) - always ready
+                shooterReady = true;
+            }
+
+            // ----------------------------------------------------
+            // RIGHT BUMPER RELEASE = Gatekeeper pulse (with velocity gating)
             // ----------------------------------------------------
             boolean rb = gamepad1.right_bumper;
 
             if (!rightBumperActive && rightBumperPressed && !rb) {
-                Robot.leftGatekeeperServo.setPower(1);
-                Robot.rightGatekeeperServo.setPower(1);
-                rightBumperTimer.reset();
-                rightBumperActive = true;
+                // Check if shooter is ready before allowing shot
+                if (!ENABLE_VELOCITY_GATING || shooterReady) {
+                    Robot.leftGatekeeperServo.setPower(1);
+                    Robot.rightGatekeeperServo.setPower(1);
+                    rightBumperTimer.reset();
+                    rightBumperActive = true;
+                    lastShotTimer.reset();  // Track shot timing
+                    lastShotWasReady = shooterReady;
+                } else {
+                    // Provide haptic feedback that shooter isn't ready
+                    gamepad1.rumble(200);
+                }
             }
 
             if (rightBumperActive) {
@@ -215,13 +251,32 @@ public class PenguinautsTeleOp extends LinearOpMode {
             Robot.shooter.setVelocity(shooterTargetVelocity);
 
             // ----------------------------------------------------
-            // TELEMETRY
+            // TELEMETRY - Enhanced with shooter status
             // ----------------------------------------------------
-            telemetry.addData("Shooter Target", shooterTargetVelocity);
-            telemetry.addData("Shooter Velocity", Robot.shooter.getVelocity());
-            telemetry.addData("Shooter Current (mA)", Robot.shooter.getCurrent(CurrentUnit.MILLIAMPS));
+            telemetry.addLine("========== SHOOTER STATUS ==========");
+            telemetry.addData("Target Velocity", "%.0f", shooterTargetVelocity);
+            telemetry.addData("Current Velocity", "%.0f", currentVelocity);
+            telemetry.addData("Velocity Error", "%.0f", velocityError);
+            telemetry.addData("Shooter Ready?", shooterReady ? "✓ READY" : "✗ NOT READY");
+            telemetry.addData("Time Since Last Shot", "%.0f ms", lastShotTimer.milliseconds());
+            
+            // Visual ready indicator
+            if (shooterReady) {
+                telemetry.addLine("🟢 READY TO SHOOT");
+            } else if (velocityError > Robot.SHOOTER_VELOCITY_TOLERANCE) {
+                telemetry.addLine("🔴 VELOCITY LOW - WAIT");
+            } else {
+                telemetry.addLine("🟡 RECOVERY - WAIT");
+            }
+            
+            telemetry.addLine();
+            telemetry.addData("Shooter Current (mA)", "%.0f", Robot.shooter.getCurrent(CurrentUnit.MILLIAMPS));
             telemetry.addData("Manual Override", shooterManualOverride);
-            telemetry.addData("Intake Motor Speed", Robot.intakeMotor.getVelocity());
+            telemetry.addData("Velocity Gating", ENABLE_VELOCITY_GATING ? "ON" : "OFF");
+            telemetry.addLine();
+            telemetry.addData("Intake Motor Speed", "%.0f", Robot.intakeMotor.getVelocity());
+            telemetry.addData("Left Wheel Power", "%.2f", leftPower);
+            telemetry.addData("Right Wheel Power", "%.2f", rightPower);
             telemetry.update();
 
         }

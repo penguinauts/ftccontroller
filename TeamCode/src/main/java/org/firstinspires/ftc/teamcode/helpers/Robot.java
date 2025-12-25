@@ -70,6 +70,10 @@ public class Robot {
     // -------------------------------------------------------------------
     // SHOOTER PIDF (TUNABLE)
     // -------------------------------------------------------------------
+    // Recommended PIDF tuning for better response to load changes:
+    // - Increase P if recovery is too slow
+    // - Increase D to reduce overshoot/oscillation
+    // - Increase F if steady-state velocity is below target
     public static int PROPORTIONAL = 350;
     public static int INTEGRAL     = 0;
     public static int DERIVATIVE   = 10;
@@ -77,6 +81,23 @@ public class Robot {
 
     public static PIDFCoefficients SHOOTER_PIDF =
             new PIDFCoefficients(PROPORTIONAL, INTEGRAL, DERIVATIVE, FEED_FORWARD);
+
+    // -------------------------------------------------------------------
+    // SHOOTER VELOCITY MANAGEMENT
+    // -------------------------------------------------------------------
+    public static double SHOOTER_VELOCITY_TOLERANCE = 50;  // ticks/sec tolerance
+    public static int SHOOTER_RECOVERY_TIME_MS = 300;      // minimum wait after each shot
+
+    /**
+     * Updates SHOOTER_PIDF from the tunable constants.
+     * Call this after changing P/I/D/F values via dashboard.
+     */
+    public static void updateShooterPIDF() {
+        SHOOTER_PIDF = new PIDFCoefficients(PROPORTIONAL, INTEGRAL, DERIVATIVE, FEED_FORWARD);
+        if (shooter != null) {
+            shooter.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER, SHOOTER_PIDF);
+        }
+    }
 
     // -------------------------------------------------------------------
     // ENCODER VALUES
@@ -425,6 +446,71 @@ public class Robot {
     // -------------------------------------------------------------------
     // SHOOTER / GATEKEEPERS / INTAKE
     // -------------------------------------------------------------------
+    /**
+     * Waits for the shooter motor to reach the target velocity within tolerance.
+     * Prevents feeding balls before shooter is ready.
+     *
+     * @param targetVelocity Target velocity in ticks/sec
+     * @param timeoutMs Maximum time to wait in milliseconds
+     * @return true if target velocity reached, false if timeout
+     */
+    public static boolean waitForShooterVelocity(double targetVelocity, long timeoutMs) {
+        if (activeOpMode == null) return true;
+
+        ElapsedTime timer = new ElapsedTime();
+        timer.reset();
+
+        while (activeOpMode.opModeIsActive() && timer.milliseconds() < timeoutMs) {
+            double currentVel = shooter.getVelocity();
+            double error = Math.abs(targetVelocity - currentVel);
+
+            // Optional telemetry for debugging
+            if (activeOpMode.telemetry != null) {
+                activeOpMode.telemetry.addData("Shooter Target", "%.0f", targetVelocity);
+                activeOpMode.telemetry.addData("Shooter Current", "%.0f", currentVel);
+                activeOpMode.telemetry.addData("Shooter Error", "%.0f", error);
+                activeOpMode.telemetry.update();
+            }
+
+            if (error <= SHOOTER_VELOCITY_TOLERANCE) {
+                return true; // Within tolerance
+            }
+
+            activeOpMode.idle();
+        }
+
+        return false; // Timeout
+    }
+
+    /**
+     * Sets shooter velocity and waits for it to stabilize.
+     * Use this instead of directly calling setVelocity when precision matters.
+     *
+     * @param targetVelocity Target velocity in ticks/sec
+     */
+    public static void setShooterVelocityAndWait(double targetVelocity) {
+        shooter.setVelocity(targetVelocity);
+        waitForShooterVelocity(targetVelocity, 2000); // 2 second timeout
+    }
+
+    /**
+     * Verifies shooter has recovered velocity after shooting a ball.
+     * Should be called between each shot for consistency.
+     *
+     * @param targetVelocity Target velocity that shooter should maintain
+     * @return true if velocity recovered, false if not
+     */
+    public static boolean verifyShooterRecovery(double targetVelocity) {
+        // Short wait to let motor respond to load
+        safeWait(SHOOTER_RECOVERY_TIME_MS);
+
+        // Check if velocity has recovered
+        double currentVel = shooter.getVelocity();
+        double error = Math.abs(targetVelocity - currentVel);
+
+        return error <= SHOOTER_VELOCITY_TOLERANCE;
+    }
+
     public static void TurnOnGatekeepersForXMilliSecondsAndTurnOff(int ms) {
         leftGatekeeperServo.setPower(GATEKEEPER_LEFT_POWER);
         rightGatekeeperServo.setPower(GATEKEEPER_RIGHT_POWER);
@@ -453,17 +539,29 @@ public class Robot {
     }
 
     // -------------------------------------------------------------------
-    // TIME-BASED
+    // TIME-BASED SHOOTING SEQUENCES
     // -------------------------------------------------------------------
-    public static void ThreeBallShootingProcess() {
+    /**
+     * Improved three-ball shooting process with velocity monitoring.
+     * Ensures shooter maintains consistent velocity between shots.
+     *
+     * @param targetShooterVelocity The velocity the shooter should maintain
+     */
+    public static void ThreeBallShootingProcess(double targetShooterVelocity) {
 
-        //first ball
-        safeWait(400);
+        // ===== FIRST BALL =====
+        // Ensure shooter is at speed before shooting
+        waitForShooterVelocity(targetShooterVelocity, 1500);
+        safeWait(200);  // Extra stability time
 
         TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
-        safeWait(400);
 
-        //second ball
+        // Wait for shooter to recover after first ball
+        if (!verifyShooterRecovery(targetShooterVelocity)) {
+            safeWait(200);  // Extra time if not recovered
+        }
+
+        // ===== SECOND BALL =====
         intakeMotor.setPower(-1);
         leftGatekeeperServo.setPower(1);
         rightGatekeeperServo.setPower(1);
@@ -472,20 +570,38 @@ public class Robot {
         intakeMotor.setPower(0);
         leftGatekeeperServo.setPower(0);
         rightGatekeeperServo.setPower(0);
-        safeWait(300);
 
-        //3rd ball
+        // Wait for shooter to recover after second ball
+        if (!verifyShooterRecovery(targetShooterVelocity)) {
+            safeWait(200);  // Extra time if not recovered
+        }
+
+        // ===== THIRD BALL =====
         OpenAndCloseTheTrapServo();
         TurnOnOutakeForXMilliSecondsAndTurnOff(50);
         TurnOnIntakeForXMilliSecondsAndTurnOff(300);
         safeWait(200);
+
+        // Ensure shooter is ready for third ball
+        waitForShooterVelocity(targetShooterVelocity, 1000);
+
         TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
         safeWait(300);
 
-        // Launch third ball again in case it failed last time
-//        Robot.OpenAndCloseTheTrapServo();
-        Robot.TurnOnIntakeForXMilliSecondsAndTurnOff(550);
-        Robot.TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
+        // Retry third ball if needed
+        TurnOnIntakeForXMilliSecondsAndTurnOff(550);
+        verifyShooterRecovery(targetShooterVelocity);
+        TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
+    }
+
+    /**
+     * Original three-ball shooting (no velocity parameter for backward compatibility).
+     * Uses the method with default behavior.
+     */
+    public static void ThreeBallShootingProcess() {
+        // Get current shooter velocity as target
+        double currentVelocity = shooter.getVelocity();
+        ThreeBallShootingProcess(Math.abs(currentVelocity));
     }
 
     public static void ThreeBallShootingProcess2() {
@@ -524,11 +640,17 @@ public class Robot {
 //        Robot.TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
     }
 
-    public static void TestShoot1() {
-//
-//        TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
-//        safeWait(400);
+    /**
+     * Improved test shooting sequence with velocity monitoring.
+     * Used for the second set of 3 balls after intake.
+     *
+     * @param targetShooterVelocity The velocity the shooter should maintain
+     */
+    public static void TestShoot1(double targetShooterVelocity) {
+        // Ensure shooter is at full speed before starting
+        waitForShooterVelocity(targetShooterVelocity, 1500);
 
+        // ===== FIRST BALL (already loaded) =====
         intakeMotor.setPower(-1);
         leftGatekeeperServo.setPower(1);
         rightGatekeeperServo.setPower(1);
@@ -537,24 +659,49 @@ public class Robot {
         intakeMotor.setPower(0);
         leftGatekeeperServo.setPower(0);
         rightGatekeeperServo.setPower(0);
-        safeWait(300);
 
+        // Wait for shooter to recover
+        verifyShooterRecovery(targetShooterVelocity);
+
+        // ===== SECOND BALL =====
         OpenAndCloseTheTrapServo();
         TurnOnOutakeForXMilliSecondsAndTurnOff(50);
         TurnOnIntakeForXMilliSecondsAndTurnOff(300);
         safeWait(200);
+
+        // Ensure shooter is ready
+        waitForShooterVelocity(targetShooterVelocity, 1000);
+
         TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
-        safeWait(300);
+
+        // Wait for shooter to recover
+        verifyShooterRecovery(targetShooterVelocity);
+
+        // ===== THIRD BALL =====
         OpenAndCloseTheTrapServo();
         TurnOnOutakeForXMilliSecondsAndTurnOff(50);
         TurnOnIntakeForXMilliSecondsAndTurnOff(300);
         safeWait(200);
+
+        // Ensure shooter is ready
+        waitForShooterVelocity(targetShooterVelocity, 1000);
+
         TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
+
+        // Retry third ball if needed
         safeWait(300);
-        // Launch third ball again in case it failed last time
-        Robot.OpenAndCloseTheTrapServo();
-        Robot.TurnOnIntakeForXMilliSecondsAndTurnOff(550);
-        Robot.TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
+        OpenAndCloseTheTrapServo();
+        TurnOnIntakeForXMilliSecondsAndTurnOff(550);
+        verifyShooterRecovery(targetShooterVelocity);
+        TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
+    }
+
+    /**
+     * Original TestShoot1 (no velocity parameter for backward compatibility).
+     */
+    public static void TestShoot1() {
+        double currentVelocity = shooter.getVelocity();
+        TestShoot1(Math.abs(currentVelocity));
     }
 
     public static void TestShoot2() {
