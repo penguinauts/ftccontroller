@@ -18,7 +18,7 @@ public class Auto_Red_6Ball extends LinearOpMode {
     // -----------------------------
     // SHOOTER TUNING
     // -----------------------------
-    public static double SHOOTER_FIRE_VELOCITY  = 1000;
+    public static double SHOOTER_FIRE_VELOCITY  = 1023;
     public static double SHOOTER_INTAKE_VELOCITY = -200;
 
     // -----------------------------
