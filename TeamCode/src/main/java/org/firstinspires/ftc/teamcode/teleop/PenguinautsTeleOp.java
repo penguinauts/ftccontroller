@@ -192,7 +192,7 @@ public class PenguinautsTeleOp extends LinearOpMode {
             if (gamepad1.x) {
                 Robot.leftGatekeeperServo.setPower(-1);
                 Robot.rightGatekeeperServo.setPower(-1);
-            } else if (!rightBumperActive) {
+            } else if (!rightBumperActive && !lb) {
                 Robot.leftGatekeeperServo.setPower(0);
                 Robot.rightGatekeeperServo.setPower(0);
             }
