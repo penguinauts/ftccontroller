@@ -536,7 +536,7 @@ public class Robot {
         intakeMotor.setPower(0);
         leftGatekeeperServo.setPower(0);
         rightGatekeeperServo.setPower(0);
-        safeWait(300);
+        safeWait(450);
 
         OpenAndCloseTheTrapServo();
         TurnOnOutakeForXMilliSecondsAndTurnOff(50);
@@ -544,6 +544,7 @@ public class Robot {
         safeWait(200);
         TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
         safeWait(300);
+
         OpenAndCloseTheTrapServo();
         TurnOnOutakeForXMilliSecondsAndTurnOff(50);
         TurnOnIntakeForXMilliSecondsAndTurnOff(300);

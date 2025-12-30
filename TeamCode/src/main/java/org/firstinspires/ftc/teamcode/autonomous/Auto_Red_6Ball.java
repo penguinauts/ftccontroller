@@ -18,7 +18,7 @@ public class Auto_Red_6Ball extends LinearOpMode {
     // -----------------------------
     // SHOOTER TUNING
     // -----------------------------
-    public static double SHOOTER_FIRE_VELOCITY  = 1023;
+    public static double SHOOTER_FIRE_VELOCITY  = 1050;
     public static double SHOOTER_INTAKE_VELOCITY = -200;
 
     // -----------------------------
@@ -137,7 +137,7 @@ public class Auto_Red_6Ball extends LinearOpMode {
 //        Robot.safeWait(600);
 
 //        Robot.trapServo.setPosition(Robot.TRAP_OPEN_POS);
-        Robot.safeWait(350);
+        Robot.safeWait(750);
 
         // ============================================================
         // STEP 7 — SHOOT LAST 3 BALLS

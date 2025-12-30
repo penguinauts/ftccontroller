@@ -18,7 +18,7 @@ public class Auto_Blue_6Ball extends LinearOpMode {
     // -----------------------------
     // SHOOTER TUNING
     // -----------------------------
-    public static double SHOOTER_FIRE_VELOCITY  = 1023;
+    public static double SHOOTER_FIRE_VELOCITY  = 1050;
     public static double SHOOTER_INTAKE_VELOCITY = -200;
 
     // -----------------------------
@@ -42,7 +42,7 @@ public class Auto_Blue_6Ball extends LinearOpMode {
     // -----------------------------
     //public static double DRIVE_POWER_BACKUP        = 1.0;
     //public static double DRIVE_POWER_FORWARD_TURN  = 1.0;
-    public static double DRIVE_POWER_SLOW_INTAKE   = 0.50;
+    public static double DRIVE_POWER_SLOW_INTAKE   = 0.40;
     //public static double DRIVE_POWER_RETURN        = 1.0;
     //public static double DRIVE_POWER_FINAL_FORWARD = 1.0;
 
@@ -136,7 +136,7 @@ public class Auto_Blue_6Ball extends LinearOpMode {
 //        Robot.safeWait(600);
 
 //        Robot.trapServo.setPosition(Robot.TRAP_OPEN_POS);
-        Robot.safeWait(350);
+        Robot.safeWait(750);
 
         // ============================================================
         // STEP 7 — SHOOT LAST 3 BALLS
