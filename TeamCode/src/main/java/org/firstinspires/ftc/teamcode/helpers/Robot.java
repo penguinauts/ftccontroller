@@ -527,11 +527,11 @@ public class Robot {
 //
 //        TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
 //        safeWait(400);
-
+        TurnOnOutakeForXMilliSecondsAndTurnOff(60);
         intakeMotor.setPower(-1);
         leftGatekeeperServo.setPower(1);
         rightGatekeeperServo.setPower(1);
-        safeWait(1000);
+        safeWait(900);
 
         intakeMotor.setPower(0);
         leftGatekeeperServo.setPower(0);
