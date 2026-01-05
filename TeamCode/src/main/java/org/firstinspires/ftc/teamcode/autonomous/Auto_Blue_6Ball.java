@@ -18,7 +18,7 @@ public class Auto_Blue_6Ball extends LinearOpMode {
     // -----------------------------
     // SHOOTER TUNING
     // -----------------------------
-    public static double SHOOTER_FIRE_VELOCITY  = 1050;
+    public static double SHOOTER_FIRE_VELOCITY  = 1040;
     public static double SHOOTER_INTAKE_VELOCITY = -200;
 
     // -----------------------------
@@ -26,15 +26,15 @@ public class Auto_Blue_6Ball extends LinearOpMode {
     // -----------------------------
     public static double BACK_UP_FROM_START_INCHES    = 41.0;
     public static double FORWARD_AFTER_TURN_INCHES    = 9;
-    public static double SLOW_FORWARD_INTAKE_INCHES   = 18.0;
-    public static double BACK_TO_RAMP_INCHES          = 30.0;
+    public static double SLOW_FORWARD_INTAKE_INCHES   = 15.0;
+    public static double BACK_TO_RAMP_INCHES          = 29.0;
     public static double FINAL_FORWARD_TO_RAMP_INCHES = 43.0;
 
     // -----------------------------
     // TURN ANGLES (TUNABLE)
     // -----------------------------
     public static double TURN_TO_INTAKE = -43.5;
-    public static double TURN_TO_SHOOT = 48.0;
+    public static double TURN_TO_SHOOT = 46.0;
     //public static double TURN_3_DEGREES = 0.0;
 
     // -----------------------------
@@ -53,6 +53,7 @@ public class Auto_Blue_6Ball extends LinearOpMode {
     public static double FINAL_EXIT_2 = -15.0;
     public static double FINAL_TURN = 45.0;
     public static double GATEKEEPER_POWER = -1;
+    public static long WAIT_BEFORE_4th_BALL = 1000;
 
 
     @Override
@@ -136,12 +137,12 @@ public class Auto_Blue_6Ball extends LinearOpMode {
 //        Robot.safeWait(600);
 
 //        Robot.trapServo.setPosition(Robot.TRAP_OPEN_POS);
-        Robot.safeWait(750);
+        Robot.safeWait(WAIT_BEFORE_4th_BALL);
 
         // ============================================================
         // STEP 7 — SHOOT LAST 3 BALLS
         // ============================================================
-        Robot.TestShoot1();
+        Robot.BlueFinalShoot();
 
         // ============================================================
         // STEP 8 — PARK

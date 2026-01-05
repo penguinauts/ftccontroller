@@ -523,7 +523,40 @@ public class Robot {
 //        Robot.TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
     }
 
-    public static void TestShoot1() {
+    public static void BlueFinalShoot() {
+//
+//        TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
+//        safeWait(400);
+        TurnOnOutakeForXMilliSecondsAndTurnOff(150);
+        intakeMotor.setPower(-1);
+        leftGatekeeperServo.setPower(1);
+        rightGatekeeperServo.setPower(1);
+        safeWait(850);
+
+        intakeMotor.setPower(0);
+        leftGatekeeperServo.setPower(0);
+        rightGatekeeperServo.setPower(0);
+        safeWait(450);
+
+        OpenAndCloseTheTrapServo();
+        TurnOnOutakeForXMilliSecondsAndTurnOff(50);
+        TurnOnIntakeForXMilliSecondsAndTurnOff(300);
+        safeWait(200);
+        TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
+        safeWait(300);
+
+        OpenAndCloseTheTrapServo();
+        TurnOnOutakeForXMilliSecondsAndTurnOff(50);
+        TurnOnIntakeForXMilliSecondsAndTurnOff(300);
+        safeWait(200);
+        TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
+        safeWait(300);
+        // Launch third ball again in case it failed last time
+        Robot.OpenAndCloseTheTrapServo();
+        Robot.TurnOnIntakeForXMilliSecondsAndTurnOff(550);
+        Robot.TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
+    }
+    public static void RedFinalShoot() {
 //
 //        TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
 //        safeWait(400);
@@ -556,6 +589,7 @@ public class Robot {
         Robot.TurnOnIntakeForXMilliSecondsAndTurnOff(550);
         Robot.TurnOnGatekeepersForXMilliSecondsAndTurnOff(500);
     }
+
 
     public static void TestShoot2() {
 

@@ -142,7 +142,7 @@ public class Auto_Red_6Ball extends LinearOpMode {
         // ============================================================
         // STEP 7 — SHOOT LAST 3 BALLS
         // ============================================================
-        Robot.TestShoot1();
+        Robot.RedFinalShoot();
 
         // ============================================================
         // STEP 8 — PARK
