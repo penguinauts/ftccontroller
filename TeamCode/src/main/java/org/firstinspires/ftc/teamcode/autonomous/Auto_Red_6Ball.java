@@ -137,7 +137,7 @@ public class Auto_Red_6Ball extends LinearOpMode {
 //        Robot.safeWait(600);
 
 //        Robot.trapServo.setPosition(Robot.TRAP_OPEN_POS);
-        Robot.safeWait(750);
+        Robot.safeWait(1000);
 
         // ============================================================
         // STEP 7 — SHOOT LAST 3 BALLS
