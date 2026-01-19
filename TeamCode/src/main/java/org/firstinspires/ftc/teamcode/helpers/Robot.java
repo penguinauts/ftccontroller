@@ -14,6 +14,8 @@ import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 
+import java.util.function.BooleanSupplier;
+
 @Config
 public class Robot {
 
@@ -54,8 +56,11 @@ public class Robot {
     // -------------------------------------------------------------------
     // TUNABLE POSITIONS & POWERS
     // -------------------------------------------------------------------
+    // IMPORTANT: keep these as the values that worked for you
     public static double TRAP_OPEN_POS   = 0.77;
     public static double TRAP_CLOSED_POS = 0.55;
+    public static int TRAP_SEAT_MS = 140; // 120–220
+
 
     public static double INTAKE_POWER  = -1.0;
     public static double INTAKE_VELOCITY = -2500;
@@ -64,37 +69,57 @@ public class Robot {
     public static double GATEKEEPER_LEFT_POWER = 1.0;
     public static double GATEKEEPER_RIGHT_POWER = 1.0;
 
-    //public static double GATEKEEPER_STOP_POWER    = 0.0;
-
     // -------------------------------------------------------------------
     // SHOOTER PIDF (TUNABLE)
     // -------------------------------------------------------------------
-    public static int PROPORTIONAL = 350;
-    public static int INTEGRAL     = 0;
-    public static int DERIVATIVE   = 10;
-    public static int FEED_FORWARD = 14;
+    public static double PROPORTIONAL = 80;
+    public static double INTEGRAL     = 0;
+    public static double DERIVATIVE   = 0;
+    public static double FEED_FORWARD = 11.7;
 
     public static PIDFCoefficients SHOOTER_PIDF =
             new PIDFCoefficients(PROPORTIONAL, INTEGRAL, DERIVATIVE, FEED_FORWARD);
 
     // -------------------------------------------------------------------
+    // SMART SHOOT TUNABLES (DASHBOARD)
+    // -------------------------------------------------------------------
+    public static double SHOOT_READY_TOL = 35;       // +/- ticks/sec
+    public static int SHOOT_READY_STABLE_MS = 140;   // must be stable this long
+    public static int SHOOT_READY_TIMEOUT_MS = 450;
+
+    public static int FEED_MAX_MS = 420;             // hard cap so we never run forever
+    public static int FEED_MIN_MS = 160;             // prevents premature stop
+    public static int FEED_TAIL_MS = 110;            // push after dip so ball clears
+
+    public static double DIP_FROM_PEAK = 90;        // 100–180 typical
+    public static int DIP_CONFIRM_COUNT = 2;
+
+    public static double FEED_OVERSPEED = 0;         // try 0, 40, 60 if needed
+
+    // Velocity filtering (EMA)
+    public static double SHOOTER_FILTER_ALPHA = 0.25; // 0.2–0.35
+
+    // Optional jam recovery
+    public static int JAM_REVERSE_MS = 140;
+    public static int JAM_FORWARD_MS = 160;
+
+    // -------------------------------------------------------------------
     // ENCODER VALUES
     // -------------------------------------------------------------------
     public static double WHEEL_DIAMETER_INCHES = 3.78;
-    //public static double TICKS_PER_ROTATION   = 537.7;
     public static double TICKS_PER_INCH       = 52.2;
     public static double WHEEL_CIRCUMFERENCE  = Math.PI * WHEEL_DIAMETER_INCHES;
 
-    //public static double INCHES_PER_90_DEG = 18.0;
-
     public static double TURN_ROTATION_P = 150;
+    //public static boolean ALLOW_OUTTAKE = true;
+
 
     public static void recomputeConstants() {
         WHEEL_CIRCUMFERENCE = Math.PI * WHEEL_DIAMETER_INCHES;
     }
 
     // -------------------------------------------------------------------
-    // INITIALIZATION (NO IMU)
+    // INITIALIZATION
     // -------------------------------------------------------------------
     public static void initializeRobot(HardwareMap hw) {
 
@@ -112,30 +137,25 @@ public class Robot {
         SHOOTER_PIDF = new PIDFCoefficients(PROPORTIONAL, INTEGRAL, DERIVATIVE, FEED_FORWARD);
         shooter.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER, SHOOTER_PIDF);
         shooter.setZeroPowerBehavior(DcMotorEx.ZeroPowerBehavior.BRAKE);
-        //shooter.setDirection(DcMotorSimple.Direction.FORWARD); //remove this later
 
         // Intake
         intakeMotor = hw.get(DcMotorEx.class, "Intake");
         intakeMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         intakeMotor.setDirection(DcMotor.Direction.REVERSE);
-        //intakeMotor.setDirection(DcMotor.Direction.FORWARD);
-//        intakeMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);  //old
         intakeMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
-
-
 
         // Drive wheels
         leftWheel  = hw.get(DcMotorEx.class, "leftWheel");
         rightWheel = hw.get(DcMotorEx.class, "rightWheel");
 
         imu = hw.get(IMU.class, "imu");
-        imu.initialize(new IMU.Parameters(new RevHubOrientationOnRobot(RevHubOrientationOnRobot.LogoFacingDirection.LEFT, RevHubOrientationOnRobot.UsbFacingDirection.UP)));  //on the other control hub
-        //imu.initialize(new IMU.Parameters(new RevHubOrientationOnRobot(RevHubOrientationOnRobot.LogoFacingDirection.UP, RevHubOrientationOnRobot.UsbFacingDirection.FORWARD)));
-
+        imu.initialize(new IMU.Parameters(
+                new RevHubOrientationOnRobot(
+                        RevHubOrientationOnRobot.LogoFacingDirection.LEFT,
+                        RevHubOrientationOnRobot.UsbFacingDirection.UP)));
 
         leftWheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         rightWheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        //leftWheel.setDirection(DcMotorSimple.Direction.REVERSE);
         rightWheel.setDirection(DcMotor.Direction.FORWARD);
 
         // Reset encoders
@@ -144,67 +164,11 @@ public class Robot {
 
         leftWheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         rightWheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-    }
 
-    /**
-     * Calculates the target velocity at a given position using a motion profile.
-     * Supports both trapezoidal (full speed reached) and triangular (peak speed limited) profiles.
-     *
-     * @param targetTicks Total distance to travel (in ticks)
-     * @param currentTicks Current position (in ticks)
-     * @return Target velocity at current position (in ticks/sec)
-     */
-    public static double getProfiledVelocity(double targetTicks, double currentTicks) {
-        // Input validation
-        if (targetTicks == 0) return 0;
-
-        // Work with absolute values for simplicity
-        double x = Math.abs(currentTicks);
-        double total = Math.abs(targetTicks);
-
-        // Clamp current position to valid range
-        if (x > total) {
-            x = total;
-        }
-
-        // Distance required to accelerate/decelerate to/from max velocity
-        double accelDist = (MAX_VEL * MAX_VEL) / (2.0 * MAX_ACCEL);
-        double decelDist = (MAX_VEL * MAX_VEL) / (2.0 * MAX_DECEL);
-
-        double vel;
-
-        // Check if robot can reach full speed
-        if (accelDist + decelDist > total) {
-            // TRIANGULAR PROFILE: Cannot reach MAX_VEL
-            // Calculate peak velocity and transition point
-            double peakVel = Math.sqrt(2.0 * MAX_ACCEL * MAX_DECEL * total / (MAX_ACCEL + MAX_DECEL));
-            double transitionPoint = (peakVel * peakVel) / (2.0 * MAX_ACCEL);
-
-            if (x < transitionPoint) {
-                // Acceleration phase
-                vel = Math.sqrt(2.0 * MAX_ACCEL * x);
-            } else {
-                // Deceleration phase
-                double remain = total - x;
-                vel = Math.sqrt(2.0 * MAX_DECEL * remain);
-            }
-        } else {
-            // TRAPEZOIDAL PROFILE: Can reach MAX_VEL
-            if (x < accelDist) {
-                // Acceleration phase
-                vel = Math.sqrt(2.0 * MAX_ACCEL * x);
-            } else if (x > (total - decelDist)) {
-                // Deceleration phase
-                double remain = total - x;
-                vel = Math.sqrt(2.0 * MAX_DECEL * remain);
-            } else {
-                // Constant velocity phase
-                vel = MAX_VEL;
-            }
-        }
-
-        // Safety clamp to ensure velocity is within bounds
-        return Math.min(vel, MAX_VEL);
+        // Safe defaults
+        trapServo.setPosition(TRAP_CLOSED_POS);
+        setGatekeepers(0);
+        setIntake(0);
     }
 
     // -------------------------------------------------------------------
@@ -219,29 +183,91 @@ public class Robot {
         ElapsedTime timer = new ElapsedTime();
         timer.reset();
 
-        while (activeOpMode.opModeIsActive() &&
-                timer.milliseconds() < ms) {
+        while (activeOpMode.opModeIsActive() && timer.milliseconds() < ms) {
             activeOpMode.idle();
         }
+    }
+
+
+    /**
+     * Calculates the target velocity at a given position using a motion profile.
+     * Supports trapezoidal and triangular profiles.
+     *
+     * @param targetTicks  Total distance (ticks)
+     * @param currentTicks Current position (ticks)
+     * @return Target velocity (ticks/sec)
+     */
+    public static double getProfiledVelocity(double targetTicks, double currentTicks) {
+        if (targetTicks == 0) return 0;
+
+        double x = Math.abs(currentTicks);
+        double total = Math.abs(targetTicks);
+
+        if (x > total) x = total;
+
+        double accelDist = (MAX_VEL * MAX_VEL) / (2.0 * MAX_ACCEL);
+        double decelDist = (MAX_VEL * MAX_VEL) / (2.0 * MAX_DECEL);
+
+        double vel;
+
+        if (accelDist + decelDist > total) {
+            // TRIANGULAR profile
+            double peakVel = Math.sqrt(
+                    2.0 * MAX_ACCEL * MAX_DECEL * total / (MAX_ACCEL + MAX_DECEL)
+            );
+            double transition = (peakVel * peakVel) / (2.0 * MAX_ACCEL);
+
+            if (x < transition) {
+                vel = Math.sqrt(2.0 * MAX_ACCEL * x);
+            } else {
+                double remain = total - x;
+                vel = Math.sqrt(2.0 * MAX_DECEL * remain);
+            }
+        } else {
+            // TRAPEZOIDAL profile
+            if (x < accelDist) {
+                vel = Math.sqrt(2.0 * MAX_ACCEL * x);
+            } else if (x > (total - decelDist)) {
+                double remain = total - x;
+                vel = Math.sqrt(2.0 * MAX_DECEL * remain);
+            } else {
+                vel = MAX_VEL;
+            }
+        }
+
+        return Math.min(vel, MAX_VEL);
+    }
+
+    // -------------------------------------------------------------------
+    // WAIT HELPERS
+    // -------------------------------------------------------------------
+    private static boolean waitUntil(BooleanSupplier cond, long timeoutMs) {
+        if (activeOpMode == null) {
+            long start = System.currentTimeMillis();
+            while ((System.currentTimeMillis() - start) < timeoutMs) {
+                if (cond.getAsBoolean()) return true;
+                try { Thread.sleep(5); } catch (InterruptedException ignored) {}
+            }
+            return cond.getAsBoolean();
+        }
+
+        ElapsedTime t = new ElapsedTime();
+        t.reset();
+        while (activeOpMode.opModeIsActive() && t.milliseconds() < timeoutMs) {
+            if (cond.getAsBoolean()) return true;
+            activeOpMode.idle();
+        }
+        return cond.getAsBoolean();
     }
 
     // -------------------------------------------------------------------
     // ENCODER STRAIGHT DRIVE (NO IMU)
     // -------------------------------------------------------------------
-    // Drift correction constant (tune if robot veers left or right)
     public static double DRIFT_CORRECTION_KP = 0.05;
 
-    /**
-     * Drives straight for a specified distance using motion profiling and drift correction.
-     *
-     * @param opMode The active OpMode (for checking if still active)
-     * @param inches Distance to travel in inches (positive = forward, negative = backward)
-     * @param maxPower Maximum power multiplier (0.0 to 1.0) to scale the motion profile
-     */
     public static void driveStraightInches(LinearOpMode opMode,
                                            double inches,
                                            double maxPower) {
-        // Input validation
         if (inches == 0) return;
         if (maxPower <= 0) maxPower = 0.1;
         if (maxPower > 1.0) maxPower = 1.0;
@@ -251,55 +277,38 @@ public class Robot {
         int targetTicks = (int)(inches * TICKS_PER_INCH);
         double direction = Math.signum(inches);
 
-        // Reset encoders
         leftWheel.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         rightWheel.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
 
         leftWheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         rightWheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
-        // Timeout protection (calculate based on distance and max velocity)
-        double estimatedTime = (Math.abs(targetTicks) / MAX_VEL) * 1.5 + 2.0; // 50% margin + 2sec
+        double estimatedTime = (Math.abs(targetTicks) / MAX_VEL) * 1.5 + 2.0;
         ElapsedTime timeout = new ElapsedTime();
 
         while (opMode.opModeIsActive()) {
-            // Check timeout
-            if (timeout.seconds() > estimatedTime) {
-                opMode.telemetry.addData("Warning", "Drive timeout exceeded");
-                opMode.telemetry.update();
-                break;
-            }
+            if (timeout.seconds() > estimatedTime) break;
 
-            // Get individual wheel positions
             int posL = Math.abs(leftWheel.getCurrentPosition());
             int posR = Math.abs(rightWheel.getCurrentPosition());
-            double avgPos = (posL + posR) / 2.0; // Use double for precision
+            double avgPos = (posL + posR) / 2.0;
 
-            // Stop when reached target distance
             if (avgPos >= Math.abs(targetTicks)) break;
 
-            // Get desired velocity from motion profile (both params as absolute values)
             double targetVel = getProfiledVelocity(Math.abs(targetTicks), avgPos);
-
-            // Scale the velocity directly by maxPower
             double scaledVel = targetVel * maxPower;
 
-            // Apply MIN_POWER only when not decelerating near the end
-            // (during deceleration, we want to allow lower speeds for smooth stopping)
             double remainingDist = Math.abs(targetTicks) - avgPos;
             double decelThreshold = (MIN_POWER * MIN_POWER * MAX_VEL * MAX_VEL) / (2.0 * MAX_DECEL);
 
             if (remainingDist > decelThreshold) {
-                // Not in final deceleration zone - enforce minimum power
                 double minVel = MIN_POWER * MAX_VEL;
                 scaledVel = Math.max(scaledVel, minVel);
             }
 
-            // Drift correction: compute error between left and right wheels
             int positionError = posL - posR;
             double correction = DRIFT_CORRECTION_KP * positionError;
 
-            // Apply direction and drift correction
             double leftVel = direction * (scaledVel - correction);
             double rightVel = direction * (scaledVel + correction);
 
@@ -311,6 +320,7 @@ public class Robot {
 
         stopDrive();
     }
+
     public static void turnDegreesIMU(LinearOpMode opMode, double degrees) {
         degrees *= -1;
         imu.resetYaw();
@@ -323,25 +333,16 @@ public class Robot {
             double out = TURN_ROTATION_P * error;
             rightWheel.setVelocity(out);
             leftWheel.setVelocity(-out);
-        } while ((Math.abs(error) > tolerance || Math.abs(imu.getRobotAngularVelocity(AngleUnit.DEGREES).zRotationRate) > velocityTolerance) && opMode.opModeIsActive());
+        } while ((Math.abs(error) > tolerance ||
+                Math.abs(imu.getRobotAngularVelocity(AngleUnit.DEGREES).zRotationRate) > velocityTolerance)
+                && opMode.opModeIsActive());
+
         stopDrive();
     }
 
-    // -------------------------------------------------------------------
-    // SLOW DRIVE
-    // -------------------------------------------------------------------
-    /**
-     * Drives straight slowly for precise positioning using motion profiling and drift correction.
-     * Uses reduced MIN_POWER threshold for finer control at low speeds.
-     *
-     * @param opMode The active OpMode (for checking if still active)
-     * @param inches Distance to travel in inches (positive = forward, negative = backward)
-     * @param maxPower Maximum power multiplier (0.0 to 1.0) - typically lower than regular drive
-     */
     public static void driveStraightSlowInches(LinearOpMode opMode,
                                                double inches,
                                                double maxPower) {
-        // Input validation
         if (inches == 0) return;
         if (maxPower <= 0) maxPower = 0.1;
         if (maxPower > 1.0) maxPower = 1.0;
@@ -357,47 +358,32 @@ public class Robot {
         leftWheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         rightWheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
-        // Timeout protection (slower movement needs more time)
         double estimatedTime = (Math.abs(targetTicks) / (MAX_VEL * maxPower)) * 2.0 + 3.0;
         ElapsedTime timeout = new ElapsedTime();
 
         while (opMode.opModeIsActive()) {
-            // Check timeout
-            if (timeout.seconds() > estimatedTime) {
-                opMode.telemetry.addData("Warning", "Slow drive timeout exceeded");
-                opMode.telemetry.update();
-                break;
-            }
+            if (timeout.seconds() > estimatedTime) break;
 
-            // Get individual wheel positions
             int posL = Math.abs(leftWheel.getCurrentPosition());
             int posR = Math.abs(rightWheel.getCurrentPosition());
-            double avgPos = (posL + posR) / 2.0; // Use double for precision
+            double avgPos = (posL + posR) / 2.0;
 
             if (avgPos >= Math.abs(targetTicks)) break;
 
-            // Get desired velocity from motion profile (both params as absolute values)
             double targetVel = getProfiledVelocity(Math.abs(targetTicks), avgPos);
-
-            // Scale the velocity directly by maxPower for slow mode
             double scaledVel = targetVel * maxPower;
 
-            // Slow drive uses reduced MIN_POWER (80%) to allow finer control
-            // Apply MIN_POWER only when not decelerating near the end
             double remainingDist = Math.abs(targetTicks) - avgPos;
             double decelThreshold = (MIN_POWER * 0.8 * MIN_POWER * 0.8 * MAX_VEL * MAX_VEL) / (2.0 * MAX_DECEL);
 
             if (remainingDist > decelThreshold) {
-                // Not in final deceleration zone - enforce reduced minimum power
                 double minVel = MIN_POWER * 0.8 * MAX_VEL;
                 scaledVel = Math.max(scaledVel, minVel);
             }
 
-            // Drift correction: compute error between left and right wheels
             int positionError = posL - posR;
             double correction = DRIFT_CORRECTION_KP * positionError;
 
-            // Apply direction and drift correction
             double leftVel = direction * (scaledVel - correction);
             double rightVel = direction * (scaledVel + correction);
 
@@ -410,16 +396,190 @@ public class Robot {
         stopDrive();
     }
 
-    // -------------------------------------------------------------------
-    // STOP DRIVE
-    // -------------------------------------------------------------------
     private static void stopDrive() {
         leftWheel.setPower(0);
         rightWheel.setPower(0);
-
         leftWheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         rightWheel.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
     }
+
+    // -------------------------------------------------------------------
+    // SHOOTER / GATEKEEPERS / INTAKE BASIC HELPERS
+    // -------------------------------------------------------------------
+    public static void setGatekeepers(double power) {
+        leftGatekeeperServo.setPower(power * GATEKEEPER_LEFT_POWER);
+        rightGatekeeperServo.setPower(power * GATEKEEPER_RIGHT_POWER);
+    }
+
+    public static void setIntake(double power) {
+        intakeMotor.setPower(power);
+    }
+
+//    public static void TurnOnGatekeepersForXMilliSecondsAndTurnOff(int ms) {
+//        setGatekeepers(1.0);
+//        safeWait(ms);
+//        setGatekeepers(0);
+//    }
+//
+//    public static void TurnOnIntakeForXMilliSecondsAndTurnOff(int ms) {
+//        intakeMotor.setPower(INTAKE_POWER);
+//        safeWait(ms);
+//        intakeMotor.setPower(0);
+//    }
+//
+//    public static void TurnOnOutakeForXMilliSecondsAndTurnOff(int ms) {
+//        if (!ALLOW_OUTTAKE) return;
+//        intakeMotor.setPower(OUTTAKE_POWER);
+//        safeWait(ms);
+//        intakeMotor.setPower(0);
+//    }
+
+    // -------------------------------------------------------------------
+    // TRAP — RESTORED WORKING VERSION (DO NOT "OPTIMIZE" YET)
+    // -------------------------------------------------------------------
+//    public static void OpenAndCloseTheTrapServo() {
+//        trapServo.setPosition(TRAP_OPEN_POS);
+//        safeWait(495); // your known-good
+//        trapServo.setPosition(TRAP_CLOSED_POS);
+//        safeWait(200); // reduced from 500; increase if needed
+//    }
+
+    // -------------------------------------------------------------------
+    // SMART SHOOTING (USES TRAP AS-IS)
+    // -------------------------------------------------------------------
+    private static double shooterVFilt = 0;
+    private static boolean shooterFilterInit = false;
+
+    private static double updateShooterVFilt() {
+        double v = shooter.getVelocity();
+        if (!shooterFilterInit) {
+            shooterVFilt = v;
+            shooterFilterInit = true;
+        } else {
+            shooterVFilt = (SHOOTER_FILTER_ALPHA * v) + ((1.0 - SHOOTER_FILTER_ALPHA) * shooterVFilt);
+        }
+        return shooterVFilt;
+    }
+
+    private static void resetShooterFilterToCurrent() {
+        shooterVFilt = shooter.getVelocity();
+        shooterFilterInit = true;
+    }
+
+    public static boolean waitShooterReady(double targetVel) {
+        final ElapsedTime stable = new ElapsedTime();
+        stable.reset();
+        resetShooterFilterToCurrent();
+
+        return waitUntil(() -> {
+            double raw  = shooter.getVelocity();
+            double filt = updateShooterVFilt();
+
+            boolean rawReady  = Math.abs(raw  - targetVel) <= SHOOT_READY_TOL;
+            boolean filtReady = Math.abs(filt - targetVel) <= SHOOT_READY_TOL;
+
+            if (rawReady && filtReady) {
+                return stable.milliseconds() >= SHOOT_READY_STABLE_MS;
+            } else {
+                stable.reset();
+                return false;
+            }
+        }, SHOOT_READY_TIMEOUT_MS);
+    }
+
+
+    private static boolean waitForShotEvent(double targetVel, long timeoutMs) {
+        resetShooterFilterToCurrent();
+        final ElapsedTime t = new ElapsedTime();
+        t.reset();
+
+        double peak = shooter.getVelocity();
+        int dipCount = 0;
+
+        while (activeOpMode != null && activeOpMode.opModeIsActive() && t.milliseconds() < timeoutMs) {
+            double raw = shooter.getVelocity();
+            if (raw > peak) peak = raw;
+
+            boolean dipped = (peak - raw) > DIP_FROM_PEAK;
+
+            if (dipped) dipCount++;
+            else dipCount = 0;
+
+            if (dipCount >= DIP_CONFIRM_COUNT && t.milliseconds() >= FEED_MIN_MS) return true;
+
+            activeOpMode.idle();
+        }
+        return false;
+    }
+
+    public static void jamRecover() {
+        setGatekeepers(0);
+
+        intakeMotor.setPower(OUTTAKE_POWER);
+        safeWait(JAM_REVERSE_MS);
+
+        intakeMotor.setPower(INTAKE_POWER);
+        safeWait(JAM_FORWARD_MS);
+
+        intakeMotor.setPower(0);
+    }
+
+    public static boolean feedOneBallSmart(double shootTargetVel) {
+        // Wait until shooter is stable before feeding
+        waitShooterReady(shootTargetVel);
+
+        double feedVel = shootTargetVel + FEED_OVERSPEED;
+        shooter.setVelocity(feedVel);
+
+        setIntake(INTAKE_POWER);
+        setGatekeepers(1.0);
+
+        boolean sawShot = waitForShotEvent(feedVel, FEED_MAX_MS);
+
+        // Ensure ball clears
+        safeWait(FEED_TAIL_MS);
+
+        setGatekeepers(0);
+        setIntake(0);
+
+        shooter.setVelocity(shootTargetVel);
+
+       // if (!sawShot) jamRecover();
+
+        waitShooterReady(shootTargetVel);
+        return sawShot;
+    }
+
+    /**
+     * Smart 3-ball using your known-good trap timing.
+     * Ball 1: feed
+     * Ball 2: trap open/close (old reliable), then feed
+     * Ball 3: trap open/close (old reliable), then feed
+     */
+    public static void shoot3PreloadsSmart(double shootTargetVel) {
+        feedOneBallSmart(shootTargetVel);
+
+        OpenAndCloseTheTrapServo();
+        safeWait(TRAP_SEAT_MS);
+        feedOneBallSmart(shootTargetVel);
+
+        OpenAndCloseTheTrapServo();
+        safeWait(TRAP_SEAT_MS);
+        feedOneBallSmart(shootTargetVel);
+    }
+
+    public static void shoot3FinalSmart(double shootTargetVel) {
+        feedOneBallSmart(shootTargetVel);
+
+        OpenAndCloseTheTrapServo();
+        safeWait(TRAP_SEAT_MS);
+        feedOneBallSmart(shootTargetVel);
+
+        OpenAndCloseTheTrapServo();
+        safeWait(TRAP_SEAT_MS);
+        feedOneBallSmart(shootTargetVel);
+    }
+
 
     // -------------------------------------------------------------------
     // SHOOTER / GATEKEEPERS / INTAKE
@@ -725,6 +885,4 @@ public class Robot {
 //        TurnOnGatekeepersForXMilliSecondsAndTurnOff(1000);
 //        safeWait(500);
 //    }
-
-
 }
