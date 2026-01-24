@@ -21,13 +21,13 @@ public class Auto_Red_V1_6Ball extends LinearOpMode {
     // -----------------------------
     // DISTANCES (DASHBOARD TUNABLE)
     // -----------------------------
-    public static double BACK_UP_FROM_START_INCHES    = 33.0;
+    public static double BACK_UP_FROM_START_INCHES    = 35.0;
     public static double FORWARD_AFTER_TURN_INCHES    = 12;
     public static double SLOW_FORWARD_INTAKE_INCHES   = 23.0;
     public static double BACK_TO_RAMP_INCHES          = 33.0;
     public static double FINAL_FORWARD_TO_RAMP_INCHES = 29.0;
-    public static double INITIAL_BACKUP_FROM_START = 7.0;
-    public static double INITIAL_TURN_BEFORE_INTAKE = 10.0;
+    public static double INITIAL_BACKUP_FROM_START = 5.0;
+    public static double INITIAL_TURN_BEFORE_INTAKE = 6.0;
 
 
     // -----------------------------
@@ -35,7 +35,7 @@ public class Auto_Red_V1_6Ball extends LinearOpMode {
     //   Blue had: TURN_TO_INTAKE = -51, TURN_TO_SHOOT = +46
     //   Red mirror: +51, -46
     // -----------------------------
-    public static double TURN_TO_INTAKE = 60.0;
+    public static double TURN_TO_INTAKE = 50.0;
     public static double TURN_TO_SHOOT  = -46.0;
 
     // -----------------------------
