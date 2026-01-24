@@ -216,7 +216,7 @@ public class Robot {
             double peakVel = Math.sqrt(2.0 * MAX_ACCEL * MAX_DECEL * total / (MAX_ACCEL + MAX_DECEL));
             double transitionPoint = (peakVel * peakVel) / (2.0 * MAX_ACCEL);
 
-            if (x < transition) {
+            if (x < transitionPoint) {
                 // Acceleration phase
                 vel = Math.sqrt(2.0 * MAX_ACCEL * x);
             } else {
