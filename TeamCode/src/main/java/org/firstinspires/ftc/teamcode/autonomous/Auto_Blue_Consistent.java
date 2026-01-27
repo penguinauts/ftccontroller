@@ -49,7 +49,7 @@ public class Auto_Blue_Consistent extends LinearOpMode {
         Robot.driveStraightInches(this, -4, 1.0);
         Robot.turnDegreesIMU(this, 10);
         Robot.driveStraightInches(this, -29.3, 1.0);
-        Robot.turnDegreesIMU(this, -60);
+        Robot.turnDegreesIMU(this, -58);
 
          // 3. Intake field balls
          Robot.shooter.setVelocity(-200);
@@ -58,7 +58,8 @@ public class Auto_Blue_Consistent extends LinearOpMode {
          Robot.rightGatekeeperServo.setPower(-1);
          Robot.trapServo.setPosition(Robot.TRAP_OPEN_POS);
          Robot.intakeMotor.setPower(-1);
-         Robot.driveStraightSlowInches(this, 19.25, 0.1);
+        Robot.driveStraightInches(this, 6.5, 1.0);
+         Robot.driveStraightSlowInches(this, 13, 0.1);
 
         Robot.trapServo.setPosition(Robot.TRAP_CLOSED_POS);
         Robot.leftGatekeeperServo.setPower(0);
@@ -157,7 +158,7 @@ public class Auto_Blue_Consistent extends LinearOpMode {
         telemetry.update();
         Robot.OpenAndCloseTheTrapServo();
         Robot.intakeMotor.setPower(1);
-        pulseGatekeepers(225, -1);
+        pulseGatekeepers(100, -1);
         Robot.intakeMotor.setPower(-1);
         pulseGatekeepers(1500, 1);
         Robot.intakeMotor.setPower(0);
@@ -175,7 +176,7 @@ public class Auto_Blue_Consistent extends LinearOpMode {
         telemetry.update();
         Robot.OpenAndCloseTheTrapServo();
         Robot.intakeMotor.setPower(1);
-        pulseGatekeepers(225, -1);
+        pulseGatekeepers(100, -1);
         Robot.intakeMotor.setPower(-1);
         pulseGatekeepers(1500, 1);
         Robot.intakeMotor.setPower(0);
